@@ -30,7 +30,7 @@ const (
 func main() {
 	if len(os.Args) < 2 {
 		slog.Error("引数を指定してください。")
-		slog.Error("Usage: PDFConveterGo.exe [対象フォルダ]")
+		slog.Error("Usage: Office2PDF.exe [対象フォルダ]")
 		os.Exit(1)
 	}
 
@@ -39,7 +39,7 @@ func main() {
 	args := flag.Args()
 	if len(args) == 0 {
 		slog.Error("PDF変換対象フォルダのパスを指定してください。")
-		slog.Error("Usage: PDFConveterGo.exe [対象フォルダ]")
+		slog.Error("Usage: Office2PDF.exe [対象フォルダ]")
 		os.Exit(1)
 	}
 
