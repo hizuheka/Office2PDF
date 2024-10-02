@@ -11,6 +11,7 @@ import (
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 	"golang.org/x/exp/slog"
+ "golang.org/x/sync/errgroup"
 )
 
 var (
@@ -57,19 +58,23 @@ func main() {
 		return
 	}
 
-	if err := convertExcelFileToPdf(xlsPaths, *ignore); err != nil {
-		slog.Error("ExcelファイルのPDF変換でエラーが発生しました。:", err)
-		os.Exit(1)
+ var eg errgroup.Group
+
+ eg.Go(func() error {
+	  return convertExcelFileToPdf(xlsPaths, *ignore)
 	}
 
-	if err := convertWordFileToPdf(docPaths); err != nil {
-		slog.Error("WordファイルのPDF変換でエラーが発生しました。:", err)
-		os.Exit(1)
+ eg.Go(func() error {
+	  return convertWordFileToPdf(docPaths)
 	}
 
-	if err := convertPptFileToPdf(pptPaths); err != nil {
-		slog.Error("PowerPointファイルのPDF変換でエラーが発生しました。:", err)
-		os.Exit(1)
+ eg.Go(func() error {
+	  return convertPptFileToPdf(pptPaths)
+	}
+
+ if err := eg.Wait(); err != nil {
+  slog.Error("1つ以上のエラーが発生しました", "error", err)
+		log.Fatal(err)
 	}
 }
 
