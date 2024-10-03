@@ -59,18 +59,34 @@ func main() {
 	}
 
 	var eg errgroup.Group
+ wg := sync.WaitGroup{}
+ errChan := make(chan error, len(xlsPaths) +len(docPaths)+len(pptPaths) ) 
 
-	eg.Go(func() error {
-		return convertExcelFileToPdf(xlsPaths, *ignore)
+ wg.Add(1)
+ go func() {
+            defer wg.Done()
+		if err := convertExcelFileToPdf(xlsPaths, *ignore); err != nil {
+                errChan <- err
+            }
 	})
 
-	eg.Go(func() error {
-		return convertWordFileToPdf(docPaths)
+	wg.Add(1)
+ go func() {
+            defer wg.Done()
+		if err := convertWordFileToPdf(docPaths); err != nil {
+                errChan <- err
+            }
 	})
 
-	eg.Go(func() error {
-		return convertPptFileToPdf(pptPaths)
+	wg.Add(1)
+ go func() {
+            defer wg.Done()
+		if err := convertPptFileToPdf(pptPaths); err != nil {
+                errChan <- err
+            }
 	})
+ 
+ wg.Wait()
 
 	if err := eg.Wait(); err != nil {
 		slog.Error("1つ以上のエラーが発生しました", err)
