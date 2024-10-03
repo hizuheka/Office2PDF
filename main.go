@@ -11,7 +11,6 @@ import (
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
 	"golang.org/x/exp/slog"
-	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -58,7 +57,6 @@ func main() {
 		return
 	}
 
-	var eg errgroup.Group
  wg := sync.WaitGroup{}
  errChan := make(chan error, len(xlsPaths) +len(docPaths)+len(pptPaths) ) 
 
@@ -87,9 +85,18 @@ func main() {
 	})
  
  wg.Wait()
+ close(errChan)
 
-	if err := eg.Wait(); err != nil {
-		slog.Error("1つ以上のエラーが発生しました", err)
+ flag := true
+ for err := range errChan {
+    if flag {
+      slog.Error("PDF変換でエラーが発生しました。")
+      flag = false
+    }
+    slog.Error(err)
+ }
+
+	if !flag {
 		os.Exit(1)
 	}
 }
