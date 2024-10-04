@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
@@ -57,44 +58,44 @@ func main() {
 		return
 	}
 
- wg := sync.WaitGroup{}
- errChan := make(chan error, len(xlsPaths) +len(docPaths)+len(pptPaths) ) 
+	wg := sync.WaitGroup{}
+	errChan := make(chan error, len(xlsPaths)+len(docPaths)+len(pptPaths))
 
- wg.Add(1)
- go func() {
-            defer wg.Done()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		if err := convertExcelFileToPdf(xlsPaths, *ignore); err != nil {
-                errChan <- err
-            }
-	})
+			errChan <- err
+		}
+	}()
 
 	wg.Add(1)
- go func() {
-            defer wg.Done()
+	go func() {
+		defer wg.Done()
 		if err := convertWordFileToPdf(docPaths); err != nil {
-                errChan <- err
-            }
-	})
+			errChan <- err
+		}
+	}()
 
 	wg.Add(1)
- go func() {
-            defer wg.Done()
+	go func() {
+		defer wg.Done()
 		if err := convertPptFileToPdf(pptPaths); err != nil {
-                errChan <- err
-            }
-	})
- 
- wg.Wait()
- close(errChan)
+			errChan <- err
+		}
+	}()
 
- flag := true
- for err := range errChan {
-    if flag {
-      slog.Error("PDF変換でエラーが発生しました。")
-      flag = false
-    }
-    slog.Error(err)
- }
+	wg.Wait()
+	close(errChan)
+
+	flag := true
+	for err := range errChan {
+		if flag {
+			slog.Error("PDF変換でエラーが発生しました。")
+			flag = false
+		}
+		slog.Error("error", err)
+	}
 
 	if !flag {
 		os.Exit(1)
