@@ -23,16 +23,15 @@ var (
 	ErrConvertPdf = errors.New("PDFファイルへの変換に失敗しました。")
 )
 
-struct ConsoleOutput {
+type ConsoleOutput struct {
 	filetype int
-	log string
+	log      string
 }
 
 const (
 	MsoTriStateMsoFalse = 0
 	MsoTriStateMsoTrue  = -1
 )
-
 
 func main() {
 	if len(os.Args) < 2 {
