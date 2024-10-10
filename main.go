@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
@@ -103,6 +104,9 @@ func main() {
 	}
 
 	if !flag {
+		fmt.Print("エラーが発生しました。何かキーを押してください。\n")
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
 		os.Exit(1)
 	}
 }
