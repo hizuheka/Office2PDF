@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-ole/go-ole"
 	"github.com/go-ole/go-ole/oleutil"
+	"github.com/schollz/progressbar/v3"
 	"golang.org/x/exp/slog"
 )
 
@@ -64,30 +66,83 @@ func main() {
 		return
 	}
 
+	fmt.Printf("Excel: %d件, Word: %d件, PowerPoint: %d件のファイルを変換します。\n", len(xlsPaths), len(docPaths), len(pptPaths))
+
 	wg := sync.WaitGroup{}
 	errChan := make(chan error, len(xlsPaths)+len(docPaths)+len(pptPaths))
 
+	// Excel変換のゴルーチン
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := convertExcelFileToPdf(xlsPaths, *ignore); err != nil {
-			errChan <- err
+		if len(xlsPaths) > 0 {
+			fmt.Println("Excel変換の進行状況:")
+			bar := progressbar.NewOptions(len(xlsPaths),
+				progressbar.OptionEnableColorCodes(true),
+				progressbar.OptionShowCount(),
+				progressbar.OptionSetWidth(50),
+				progressbar.OptionSetDescription("[cyan]Excel→PDF[reset]"),
+				progressbar.OptionSetTheme(progressbar.Theme{
+					Saucer:        "[green]=[reset]",
+					SaucerHead:    "[green]>[reset]",
+					SaucerPadding: " ",
+					BarStart:      "[",
+					BarEnd:        "]",
+				}))
+
+			if err := convertExcelFileToPdf(xlsPaths, *ignore, bar); err != nil {
+				errChan <- err
+			}
 		}
 	}()
 
+	// Word変換のゴルーチン
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := convertWordFileToPdf(docPaths); err != nil {
-			errChan <- err
+		if len(docPaths) > 0 {
+			fmt.Println("Word変換の進行状況:")
+			bar := progressbar.NewOptions(len(docPaths),
+				progressbar.OptionEnableColorCodes(true),
+				progressbar.OptionShowCount(),
+				progressbar.OptionSetWidth(50),
+				progressbar.OptionSetDescription("[blue]Word→PDF[reset]"),
+				progressbar.OptionSetTheme(progressbar.Theme{
+					Saucer:        "[green]=[reset]",
+					SaucerHead:    "[green]>[reset]",
+					SaucerPadding: " ",
+					BarStart:      "[",
+					BarEnd:        "]",
+				}))
+
+			if err := convertWordFileToPdf(docPaths, bar); err != nil {
+				errChan <- err
+			}
 		}
 	}()
 
+	// PowerPoint変換のゴルーチン
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := convertPptFileToPdf(pptPaths); err != nil {
-			errChan <- err
+		if len(pptPaths) > 0 {
+			fmt.Println("PowerPoint変換の進行状況:")
+			bar := progressbar.NewOptions(len(pptPaths),
+				progressbar.OptionEnableColorCodes(true),
+				progressbar.OptionShowCount(),
+				progressbar.OptionSetWidth(50),
+				progressbar.OptionSetDescription("[magenta]PPT→PDF[reset]"),
+				progressbar.OptionSetTheme(progressbar.Theme{
+					Saucer:        "[green]=[reset]",
+					SaucerHead:    "[green]>[reset]",
+					SaucerPadding: " ",
+					BarStart:      "[",
+					BarEnd:        "]",
+				}))
+
+			if err := convertPptFileToPdf(pptPaths, bar); err != nil {
+				errChan <- err
+			}
 		}
 	}()
 
@@ -108,11 +163,13 @@ func main() {
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
 		os.Exit(1)
+	} else {
+		fmt.Println("すべての変換処理が完了しました！")
 	}
 }
 
 // PowerPointファイルをPDFに変換する。
-func convertPptFileToPdf(files []string) (rErr error) {
+func convertPptFileToPdf(files []string, bar *progressbar.ProgressBar) (rErr error) {
 	if len(files) == 0 {
 		return nil
 	}
@@ -140,12 +197,7 @@ func convertPptFileToPdf(files []string) (rErr error) {
 	}()
 	slog.Info("PowerPointを起動しました.")
 
-	// // PowerPointウィンドウを表示しないようにする
-	// if _, err := oleutil.PutProperty(pptApp, "Visible", false); err != nil {
-	// 	return err
-	// }
-
-	for _, path := range files {
+	for i, path := range files {
 		fullpath, err := filepath.Abs(path)
 		if err != nil {
 			return err
@@ -158,6 +210,8 @@ func convertPptFileToPdf(files []string) (rErr error) {
 		}
 
 		name := filepath.Base(path)
+		bar.Describe(fmt.Sprintf("[magenta]PPT→PDF[reset] (%d/%d): %s", i+1, len(files), name))
+
 		rErr = convertPptxToPdf(pptApp, fullpath, pdfFullPath)
 		if rErr != nil {
 			slog.Error(name+" 変換失敗", "err", rErr, "PDFファイル", pdfPath)
@@ -165,6 +219,8 @@ func convertPptFileToPdf(files []string) (rErr error) {
 		} else {
 			slog.Info(name+" 変換完了", "PDFファイル", pdfPath)
 		}
+		bar.Add(1)
+		time.Sleep(100 * time.Millisecond) // プログレスバーが更新されるのを待つ
 	}
 
 	return nil
@@ -173,22 +229,6 @@ func convertPptFileToPdf(files []string) (rErr error) {
 // PowerPointファイルをPDFに変換する
 func convertPptxToPdf(powerpoint *ole.IDispatch, pptPath, pdfFilePath string) error {
 	pptname := filepath.Base(pptPath)
-
-	// 　 Dim ppt As New PowerPoint.Application
-	// 　 Dim pres As PowerPoint.Presentation
-	// 　 Dim save_path As String, file_name As String
-	// 　 Dim Target As String
-	// 　 Target = Application.GetOpenFilename("PowerPoint,*.pptx")
-	// 　 If Target = "False" Then Exit Sub
-	// 　 Set pres = ppt.Presentations.Open(Target, WithWindow:=MsoTriState.msoFalse)
-	//
-	// 　 With pres
-	// 　　 save_path = CreateObject("WScript.Shell").SpecialFolders("Desktop")
-	// 　　 file_name = "Test"
-	// 　　 .ExportAsFixedFormat _
-	// 　　　　　 Path:=save_path & "\" & file_name & ".pdf", _
-	// 　　　　　 FixedFormatType:=ppFixedFormatTypePDF
-	// 　 End With
 
 	pres, err := oleutil.GetProperty(powerpoint, "Presentations")
 	if err != nil {
@@ -233,35 +273,12 @@ func convertPptxToPdf(powerpoint *ole.IDispatch, pptPath, pdfFilePath string) er
 	}
 	defer r.ToIDispatch().Release()
 
-	// pr, err := oleutil.CallMethod(r.ToIDispatch(), "Add", 1, count)
 	pr, err := oleutil.CallMethod(r.ToIDispatch(), "Add", sp, count+(sp-1))
 	if err != nil {
 		return err
 	}
-	// defer pr.ToIDispatch().Release()
 
-	// PDFに変換する
-	// ExportAsFixedFormat (
-	// 	Path,
-	// 	FixedFormatType, : ppFixedFormatTypePDF(2)
-	// 	Intent, : ppFixedFormatIntentPrint(2)
-	// 	FrameSlides, : msoFalse(0)
-	// 	HandoutOrder, : ppPrintHandoutVerticalFirst(1)
-	// 	OutputType, : ppPrintOutputSlides(1)
-	// 	PrintHiddenSlides, : msoFalse(0)
-	// 	PrintRange,
-	// 	RangeType, : ppPrintAll(1)
-	// 	SlideShowName, : ""
-	// 	IncludeDocProperties, : false
-	// 	KeepIRMSettings, : false
-	// 	DocStructureTags, : false
-	// 	BitmapMissingFonts, : false
-	// 	UseISO19005_1, : false
-	// 	ExternalExporter : nil
-	//)
-	// _, err = oleutil.CallMethod(ppt.ToIDispatch(), "ExportAsFixedFormat", pdfFilePath, 2, 2, 0, 1, 1, 0, pr, 1, "", false, false, false, false, false, nil)
 	_, err = oleutil.CallMethod(ppt, "ExportAsFixedFormat", pdfFilePath, 2, 2, 0, 1, 1, 0, pr, 1, "", false, false, false, false, false)
-	//   ppFixedFormatTypePDF, ppFixedFormatIntentScreen, msoCTrue, ppPrintHandoutHorizontalFirst, ppPrintOutputBuildSlides, msoFalse, , , , False, False, False, False, False
 	if err != nil {
 		return fmt.Errorf("%w: %s", ErrConvertPdf, err.Error())
 	}
@@ -280,19 +297,7 @@ func convertPptxToPdf(powerpoint *ole.IDispatch, pptPath, pdfFilePath string) er
 
 // PowerPointのファイルをオープンする。
 func openPptFile(pres *ole.IDispatch, path string) (*ole.IDispatch, error) {
-	// Open (FileName、 ReadOnly、 Untitled、 WithWindow)
-	//  FileName	必須	文字列型 (String)	開くファイルの名前を指定します。
-	//  ReadOnly	省略可能	MsoTriState	読み取り/書き込み可能な状態でファイルを開くか、または読み取り専用で開くかを指定します。
-	//		msoFalse	既定値です。 読み取り/書き込み可能な状態でファイルを開きます。
-	//		msoTrue	読み取り専用でファイルを開きます。
-	//  Untitled	省略可能	MsoTriState	ファイルにタイトルを設定するかどうかを指定します。
-	//		msoFalse	既定値です。 ファイル名が自動的に、開かれたプレゼンテーションのタイトルとなります。
-	//		msoTrue	タイトルなしにファイルを開きます。 これは、ファイルのコピーを作成することと同じです。
-	//  WithWindow	省略可能	MsoTriState	ファイルを表示するかどうかを指定します。
-	//		msoFalse	開かれたプレゼンテーションを非表示にします。
-	//		msoTrue	既定値です。 ファイルを表示可能なウィンドウで開きます。
 	ppt, err := oleutil.CallMethod(pres, "Open", path, MsoTriStateMsoTrue, MsoTriStateMsoFalse, MsoTriStateMsoFalse)
-	// ppt, err := oleutil.CallMethod(pres, "Open", path)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrOpenFile, err.Error())
 	}
@@ -330,18 +335,16 @@ func createPrintRange(pptname string, ppt *ole.VARIANT) (*ole.VARIANT, error) {
 	}
 
 	defer r.ToIDispatch().Release()
-	// pr, err := oleutil.CallMethod(r.ToIDispatch(), "Add", 1, count)
 	pr, err := oleutil.CallMethod(r.ToIDispatch(), "Add", sp, count+(sp-1))
 	if err != nil {
 		return nil, err
 	}
-	// defer pr.ToIDispatch().Release()
 
 	return pr, nil
 }
 
 // WordファイルをPDFに変換する。
-func convertWordFileToPdf(files []string) (rErr error) {
+func convertWordFileToPdf(files []string, bar *progressbar.ProgressBar) (rErr error) {
 	if len(files) == 0 {
 		return nil
 	}
@@ -374,7 +377,7 @@ func convertWordFileToPdf(files []string) (rErr error) {
 		return err
 	}
 
-	for _, path := range files {
+	for i, path := range files {
 		fullpath, err := filepath.Abs(path)
 		if err != nil {
 			return err
@@ -387,6 +390,8 @@ func convertWordFileToPdf(files []string) (rErr error) {
 		}
 
 		name := filepath.Base(path)
+		bar.Describe(fmt.Sprintf("[blue]Word→PDF[reset] (%d/%d): %s", i+1, len(files), name))
+
 		rErr = convertDocxToPdf(wordApp, fullpath, pdfFullPath)
 		if rErr != nil {
 			slog.Error(name+" 変換失敗", "err", rErr, "PDFファイル", pdfPath)
@@ -394,6 +399,8 @@ func convertWordFileToPdf(files []string) (rErr error) {
 		} else {
 			slog.Info(name+" 変換完了", "PDFファイル", pdfPath)
 		}
+		bar.Add(1)
+		time.Sleep(100 * time.Millisecond) // プログレスバーが更新されるのを待つ
 	}
 
 	return nil
@@ -429,7 +436,7 @@ func convertDocxToPdf(word *ole.IDispatch, dcPath, pdfFilePath string) error {
 }
 
 // ExcelファイルをPDFに変換する。
-func convertExcelFileToPdf(files []string, ig string) (rErr error) {
+func convertExcelFileToPdf(files []string, ig string, bar *progressbar.ProgressBar) (rErr error) {
 	if len(files) == 0 {
 		return nil
 	}
@@ -456,7 +463,7 @@ func convertExcelFileToPdf(files []string, ig string) (rErr error) {
 	}()
 	slog.Info("Excelを起動しました.")
 
-	for _, path := range files {
+	for i, path := range files {
 		fullpath, err := filepath.Abs(path)
 		if err != nil {
 			return err
@@ -469,13 +476,17 @@ func convertExcelFileToPdf(files []string, ig string) (rErr error) {
 		}
 
 		name := filepath.Base(path)
+		bar.Describe(fmt.Sprintf("[cyan]Excel→PDF[reset] (%d/%d): %s", i+1, len(files), name))
+
 		rErr = convertXlsxToPdf(excelApp, fullpath, pdfFullPath, ig)
 		if rErr != nil {
-			slog.Error(name+" 変換完了", err, "PDFファイル", pdfPath)
+			slog.Error(name+" 変換失敗", "err", rErr, "PDFファイル", pdfPath)
 			return err
 		} else {
 			slog.Info(name+" 変換完了", "PDFファイル", pdfPath)
 		}
+		bar.Add(1)
+		time.Sleep(100 * time.Millisecond) // プログレスバーが更新されるのを待つ
 	}
 
 	return nil
@@ -524,7 +535,6 @@ func convertXlsxToPdf(excel *ole.IDispatch, xlPath, pdfFilePath, ig string) erro
 				if err != nil {
 					return err
 				}
-				// defer selected.ToIDispatch().Release()
 			}
 		}
 
@@ -535,7 +545,6 @@ func convertXlsxToPdf(excel *ole.IDispatch, xlPath, pdfFilePath, ig string) erro
 		defer activeSheet.ToIDispatch().Release()
 
 		_, err = oleutil.CallMethod(activeSheet.ToIDispatch(), "ExportAsFixedFormat", 0, pdfFilePath, 0, false, false)
-		// _, err = oleutil.CallMethod(workbook.ToIDispatch(), "ExportAsFixedFormat", 0, pdfFilePath, 0, false, false)
 		if err != nil {
 			return err
 		}
@@ -552,168 +561,6 @@ func convertXlsxToPdf(excel *ole.IDispatch, xlPath, pdfFilePath, ig string) erro
 
 	return nil
 }
-
-func convertFileToPdf() filepath.WalkFunc {
-	// var eFlag bool
-	// var wFlag, pFlag bool
-	// var excelApp *ole.IDispatch
-	// var wordApp, ppointApp *ole.IDispatch
-
-	return func(path string, info os.FileInfo, err error) (rErr error) {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() || strings.HasPrefix(filepath.Base(path), "~") {
-			return nil
-		}
-		fullpath, err := filepath.Abs(path)
-		if err != nil {
-			return err
-		}
-		ext := filepath.Ext(fullpath)
-		if ext != ".docx" && ext != ".xlsx" && ext != ".xls" && ext != ".pptx" {
-			return nil
-		}
-		// pdfPath := getPathWithoutExt(path) + ".pdf"
-		// pdfFullPath, err := filepath.Abs(pdfPath)
-		if err != nil {
-			return err
-		}
-
-		switch ext {
-		// case ".docx":
-		// 	if !wFlag {
-		// 		wFlag = true
-		// 		// Wordアプリケーションの作成
-		// 		wordApp, err2 = createWordApp()
-		// 		if err2 != nil {
-		// 			return err2
-		// 		}
-		// 		defer wordApp.Release()
-		// 	}
-		// 	err = convertDocxToPdf(wordApp, fullpath, pdfPath)
-		case ".xlsx", ".xls":
-			// if !eFlag {
-			// 	eFlag = true
-			// 	// Excelアプリケーションの生成
-			// 	excelApp, rErr = createExcelApp()
-			// 	if rErr != nil {
-			// 		return rErr
-			// 	}
-			// 	defer excelApp.Release()
-			// 	defer func() {
-			// 		_, err := oleutil.CallMethod(excelApp, "Quit")
-			// 		if err != nil {
-			// 			rErr = errors.Join(rErr, err)
-			// 		}
-			// 		slog.Info("Excel has exited.")
-			// 	}()
-			// 	slog.Info("Excel launched.")
-			// }
-			// rErr = convertXlsxToPdf(excelApp, fullpath, pdfFullPath)
-			// if rErr != nil {
-			// 	slog.Error("Failed to convert.", err, path, pdfPath)
-			// } else {
-			// 	slog.Info("Converted.", "excel-path", path, "pdf-path", pdfPath)
-			// }
-		case ".pptx":
-			// if !pFlag {
-			// 	pFlag = true
-			// 	// PowerPointオブジェクトの生成
-			// 	ppointApp, err2 = createPowerPointApp()
-			// 	if err2 != nil {
-			// 		return err2
-			// 	}
-			// 	defer ppointApp.Release()
-			// }
-			// err = convertPptxToPdf(ppointApp, fullpath, pdfPath)
-		}
-		return nil
-	}
-}
-
-// func convertDocxToPdf(docxPath string, pdfPath string) error {
-// doc, err := document.Open(docxPath)
-// if err != nil {
-// 	return err
-// }
-// defer doc.Close()
-// pdf, err := os.Create(pdfPath)
-// if err != nil {
-// 	return err
-// }
-// defer pdf.Close()
-// err = doc.Save(pdf, document.SaveOptionPDFPageWidth(8.5), document.SaveOptionPDFPageHeight(11))
-// if err != nil {
-// 	return err
-// }
-// 	return nil
-// }
-
-// func convertPptxToPdf(pptxPath string, pdfPath string) error {
-// 	// prs, err := presentation.Open(pptxPath)
-// 	// if err != nil {
-// 	// 	return err
-// 	// }
-// 	// defer prs.Close()
-// 	// pdf, err := os.Create(pdfPath)
-// 	// if err != nil {
-// 	// 	return err
-// 	// }
-// 	// defer pdf.Close()
-// 	// err = prs.SaveToPDF(pdf)
-// 	// if err != nil {
-// 	// 	return err
-// 	// }
-// 	return nil
-// }
-
-// func convertToPDF(filepath string) error {
-// 	// Wordオブジェクトを取得する
-// 	word, err := unknown.QueryInterface(ole.IID_IDispatch)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer word.Release()
-// 	// Wordウィンドウを表示しないようにする
-// 	_, err = oleutil.PutProperty(word, "Visible", false)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	// Wordドキュメントを開く
-// 	doc, err := oleutil.CallMethod(word, "Documents", "Open", filepath)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer doc.Release()
-// 	// PDFに変換する
-// 	_, err = oleutil.CallMethod(doc, "ExportAsFixedFormat", filepath+".pdf", 17)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	return nil
-// }
-
-// func convertToPDF(filePath string) error {
-// 	// PowerPointオブジェクトをPowerPoint.Applicationオブジェクトにキャスト
-// 	powerPoint, err := unknown.QueryInterface(ole.IID_IDispatch)
-// 	if err != nil {
-// 		return fmt.Errorf("PowerPoint.Applicationオブジェクトの生成に失敗しました: %v", err)
-// 	}
-// 	defer powerPoint.Release()
-// 	// プレゼンテーションの読み込み
-// 	presentation, err := oleutil.CallMethod(powerPoint, "Presentations", filePath)
-// 	if err != nil {
-// 		return fmt.Errorf("プレゼンテーションの読み込みに失敗しました: %v", err)
-// 	}
-// 	// PDFファイルへの変換
-// 	pdfFilePath := filePath + ".pdf"
-// 	_, err = oleutil.CallMethod(presentation.ToIDispatch(), "SaveAs", pdfFilePath, 32)
-// 	if err != nil {
-// 		return fmt.Errorf("PDFへの変換に失敗しました: %v", err)
-// 	}
-// 	return nil
-// }
 
 // pathから拡張子を除いたファイル名を返す
 func getFileNameWithoutExt(path string) string {
@@ -773,11 +620,11 @@ func getFilePaths(folderPath string) ([]string, []string, []string, error) {
 			return err
 		}
 		// フォルダと~で始まるファイルはスキップ
-		if !info.IsDir() || strings.HasPrefix(filepath.Base(path), "~") {
+		if !info.IsDir() && !strings.HasPrefix(filepath.Base(path), "~") {
 			switch filepath.Ext(info.Name()) {
 			case ".xlsx", ".xls":
 				xslPaths = append(xslPaths, path)
-			case ".docx", "doc":
+			case ".docx", ".doc":
 				docPaths = append(docPaths, path)
 			case ".pptx", ".ppt":
 				pptPaths = append(pptPaths, path)
@@ -792,7 +639,7 @@ func getFilePaths(folderPath string) ([]string, []string, []string, error) {
 }
 
 func usage() {
-	slog.Info("usage: PDFConverterGO [flags] path")
+	fmt.Println("usage: PDFConverterGO [flags] path")
 	flag.PrintDefaults()
 }
 
