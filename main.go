@@ -78,13 +78,12 @@ func main() {
 		if len(xlsPaths) > 0 {
 			fmt.Println("Excel変換の進行状況:")
 			bar := progressbar.NewOptions(len(xlsPaths),
-				progressbar.OptionEnableColorCodes(true),
 				progressbar.OptionShowCount(),
 				progressbar.OptionSetWidth(50),
-				progressbar.OptionSetDescription("[cyan]Excel→PDF[reset]"),
+				progressbar.OptionSetDescription("Excel→PDF"),
 				progressbar.OptionSetTheme(progressbar.Theme{
-					Saucer:        "[green]=[reset]",
-					SaucerHead:    "[green]>[reset]",
+					Saucer:        "=",
+					SaucerHead:    ">",
 					SaucerPadding: " ",
 					BarStart:      "[",
 					BarEnd:        "]",
@@ -103,13 +102,12 @@ func main() {
 		if len(docPaths) > 0 {
 			fmt.Println("Word変換の進行状況:")
 			bar := progressbar.NewOptions(len(docPaths),
-				progressbar.OptionEnableColorCodes(true),
 				progressbar.OptionShowCount(),
 				progressbar.OptionSetWidth(50),
-				progressbar.OptionSetDescription("[blue]Word→PDF[reset]"),
+				progressbar.OptionSetDescription("Word→PDF"),
 				progressbar.OptionSetTheme(progressbar.Theme{
-					Saucer:        "[green]=[reset]",
-					SaucerHead:    "[green]>[reset]",
+					Saucer:        "=",
+					SaucerHead:    ">",
 					SaucerPadding: " ",
 					BarStart:      "[",
 					BarEnd:        "]",
@@ -128,13 +126,12 @@ func main() {
 		if len(pptPaths) > 0 {
 			fmt.Println("PowerPoint変換の進行状況:")
 			bar := progressbar.NewOptions(len(pptPaths),
-				progressbar.OptionEnableColorCodes(true),
 				progressbar.OptionShowCount(),
 				progressbar.OptionSetWidth(50),
-				progressbar.OptionSetDescription("[magenta]PPT→PDF[reset]"),
+				progressbar.OptionSetDescription("PPT→PDF"),
 				progressbar.OptionSetTheme(progressbar.Theme{
-					Saucer:        "[green]=[reset]",
-					SaucerHead:    "[green]>[reset]",
+					Saucer:        "=",
+					SaucerHead:    ">",
 					SaucerPadding: " ",
 					BarStart:      "[",
 					BarEnd:        "]",
@@ -210,7 +207,7 @@ func convertPptFileToPdf(files []string, bar *progressbar.ProgressBar) (rErr err
 		}
 
 		name := filepath.Base(path)
-		bar.Describe(fmt.Sprintf("[magenta]PPT→PDF[reset] (%d/%d): %s", i+1, len(files), name))
+		bar.Describe(fmt.Sprintf("PPT→PDF (%d/%d): %s", i+1, len(files), name))
 
 		rErr = convertPptxToPdf(pptApp, fullpath, pdfFullPath)
 		if rErr != nil {
@@ -390,7 +387,7 @@ func convertWordFileToPdf(files []string, bar *progressbar.ProgressBar) (rErr er
 		}
 
 		name := filepath.Base(path)
-		bar.Describe(fmt.Sprintf("[blue]Word→PDF[reset] (%d/%d): %s", i+1, len(files), name))
+		bar.Describe(fmt.Sprintf("Word→PDF (%d/%d): %s", i+1, len(files), name))
 
 		rErr = convertDocxToPdf(wordApp, fullpath, pdfFullPath)
 		if rErr != nil {
@@ -476,7 +473,7 @@ func convertExcelFileToPdf(files []string, ig string, bar *progressbar.ProgressB
 		}
 
 		name := filepath.Base(path)
-		bar.Describe(fmt.Sprintf("[cyan]Excel→PDF[reset] (%d/%d): %s", i+1, len(files), name))
+		bar.Describe(fmt.Sprintf("Excel→PDF (%d/%d): %s", i+1, len(files), name))
 
 		rErr = convertXlsxToPdf(excelApp, fullpath, pdfFullPath, ig)
 		if rErr != nil {
